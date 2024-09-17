@@ -169,6 +169,7 @@ export default function PublicationSummaryGenerator() {
 
     const author = filteredPublications?.[0]?.author || "Author Name";
 
+    // @ts-ignore
     doc.addSection({
       children: [
         new Paragraph({

@@ -8,6 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CalendarIcon, UploadIcon, DownloadIcon } from 'lucide-react'
+import * as XLSX from 'xlsx'
+import { Document, Packer, Paragraph } from 'docx'
+import dummyText from "@/components/blocks/dummyText.json"
 
 interface Publication {
   title: string;
@@ -29,6 +32,7 @@ export default function PublicationSummaryGenerator() {
   const [publicationTypeFilter, setPublicationTypeFilter] = useState<string>('all');
   const [publications, setPublications] = useState<Publication[]>([]);
   const [filteredPublications, setFilteredPublications] = useState<Publication[]>([]);
+  const [summaryText, setSummaryText] = useState<string>(dummyText.data);
 
   useEffect(() => {
     filterPublications();
@@ -119,6 +123,71 @@ export default function PublicationSummaryGenerator() {
     console.log('Excel parsing not implemented');
   };
 
+  const exportToExcel = () => {
+    const data: any[] = filteredPublications.map(pub => {
+      if (publicationTypeFilter === 'journal') {
+        return {
+          Title: pub.title,
+          Author: pub.author,
+          Journal: pub.journal,
+          Publisher: pub.publisher,
+          Year: pub.year,
+          DOI: pub.doi,
+        };
+      } else if (publicationTypeFilter === 'conference') {
+        return {
+          Title: pub.title,
+          Author: pub.author,
+          'Book Title': pub.booktitle,
+          Publisher: pub.publisher,
+          Year: pub.year,
+          Note: pub.pages, // Assuming Note refers to pages for conference papers
+        };
+      } else {
+        return {
+          Title: pub.title,
+          Author: pub.author,
+          'Journal/Book Title': pub.journal || pub.booktitle,
+          Publisher: pub.publisher,
+          Year: pub.year,
+        };
+      }
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Publications');
+
+    // Download the Excel file
+    XLSX.writeFile(workbook, 'filtered_publications.xlsx');
+  };
+
+  const exportToWord = () => {
+    const doc = new Document({
+      sections: []
+    });
+
+    const author = filteredPublications?.[0]?.author || "Author Name";
+
+    doc.addSection({
+      children: [
+        new Paragraph({
+          text: author,
+          heading: "Heading1",
+        }),
+        new Paragraph(`Research Summary for ${author}`),
+        new Paragraph(summaryText),
+      ],
+    });
+
+    Packer.toBlob(doc).then(blob => {
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "publication_summary.docx";
+      link.click();
+    });
+  };
+
   return (
     <div className="container mx-auto p-4 space-y-6">
       <h1 className="text-2xl font-bold mb-4">Publication Summary Generator</h1>
@@ -161,7 +230,7 @@ export default function PublicationSummaryGenerator() {
           </div>
         </div>
       </div>
-      
+
       <div className="flex items-center w-max">
         <Select onValueChange={(val) => setPublicationTypeFilter(val)}>
           <SelectTrigger>
@@ -177,14 +246,14 @@ export default function PublicationSummaryGenerator() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Publication Records {(publications.length!==0) && `- ${publications?.[0].author}`}</CardTitle>
+          <CardTitle>Publication Records {(publications.length !== 0) && `- ${publications?.[0].author}`}</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Title</TableHead>
-                <TableHead>Journal/Book</TableHead>
+                <TableHead>{publicationTypeFilter === "all" ? "Journal/Book" : (publicationTypeFilter === "journal" ? "Journal" : "Book Title")}</TableHead>
                 <TableHead>Year</TableHead>
                 <TableHead>Type</TableHead>
               </TableRow>
@@ -195,7 +264,7 @@ export default function PublicationSummaryGenerator() {
                   <TableCell>{pub.title}</TableCell>
                   <TableCell>{pub.journal || pub.booktitle}</TableCell>
                   <TableCell>{pub.year}</TableCell>
-                  <TableCell>{pub.type==="article" ? "Journal" : "Conference"}</TableCell>
+                  <TableCell>{pub.type === "article" ? "Journal" : "Conference"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -204,11 +273,11 @@ export default function PublicationSummaryGenerator() {
       </Card>
 
       <div className="flex flex-col space-y-2 sm:flex-row sm:space-x-4 sm:space-y-0">
-        <Button>
+        <Button onClick={exportToExcel}>
           <DownloadIcon className="w-5 h-5 mr-2" />
           Export to Excel
         </Button>
-        <Button>
+        <Button onClick={exportToWord}>
           <DownloadIcon className="w-5 h-5 mr-2" />
           Export to Word
         </Button>
@@ -223,6 +292,9 @@ export default function PublicationSummaryGenerator() {
           <p>Journal Articles: {filteredPublications.filter(p => p.type.toLowerCase() === 'article').length}</p>
           <p>Conference Papers: {filteredPublications.filter(p => p.type.toLowerCase() === 'inproceedings').length}</p>
           <p>Most Recent Year: {(isFinite(Math.max(...filteredPublications.map(p => p.year)))) ? Math.max(...filteredPublications.map(p => p.year)) : "None"}</p>
+        </CardContent>
+        <CardContent>
+          <p>{summaryText}</p>
         </CardContent>
       </Card>
     </div>
